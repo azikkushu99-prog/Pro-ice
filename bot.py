@@ -16,7 +16,7 @@ from aiogram.types import (
     Message, CallbackQuery, TelegramObject,
     ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    FSInputFile
+    FSInputFile, ErrorEvent
 )
 
 from config import BOT_TOKEN, ADMIN_IDS, NOTIFY_IDS, MIN_ORDER_AMOUNT, DB_PATH
@@ -63,8 +63,9 @@ CATALOG_TEXT = (
 
 CONTACT_TEXT = (
     "📞 <b>Связь с менеджером</b>\n\n"
-    "Telegram: @@Tsari11\n"
-    "Телефон: +7 (988) 836-22-05\n"
+    "Telegram: @your_manager\n"
+    "Телефон: +7 (XXX) XXX-XX-XX\n"
+    "Время работы: 08:00 — 22:00"
 )
 
 from aiogram.exceptions import TelegramBadRequest
@@ -1046,15 +1047,16 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
 
     @dp.errors()
-    async def global_error_handler(event, exception):
+    async def global_error_handler(error_event: ErrorEvent):
         """Ignore stale callback query errors, log everything else."""
-        if isinstance(exception, TelegramBadRequest):
-            msg = str(exception)
+        exc = error_event.exception
+        if isinstance(exc, TelegramBadRequest):
+            msg = str(exc)
             if "query is too old" in msg or "query ID is invalid" in msg:
-                return True  # suppress
+                return True
             if "message is not modified" in msg:
-                return True  # suppress harmless edit conflicts
-        logger.error(f"Unhandled error: {exception}", exc_info=exception)
+                return True
+        logger.error(f"Unhandled error: {exc}", exc_info=exc)
         return False
 
     dp.message.middleware(AuthMiddleware())
