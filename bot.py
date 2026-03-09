@@ -63,10 +63,11 @@ CATALOG_TEXT = (
 
 CONTACT_TEXT = (
     "📞 <b>Связь с менеджером</b>\n\n"
-    "Telegram: @your_manager\n"
-    "Телефон: +7 (XXX) XXX-XX-XX\n"
-    "Время работы: 08:00 — 22:00"
+    "Telegram: @@Tsari11\n"
+    "Телефон: +7 (988) 836-22-05\n"
 )
+
+from aiogram.exceptions import TelegramBadRequest
 
 # ═══════════════════════════════════════════════════════
 #  ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -1044,6 +1045,18 @@ async def main():
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
 
+    @dp.errors()
+    async def global_error_handler(event, exception):
+        """Ignore stale callback query errors, log everything else."""
+        if isinstance(exception, TelegramBadRequest):
+            msg = str(exception)
+            if "query is too old" in msg or "query ID is invalid" in msg:
+                return True  # suppress
+            if "message is not modified" in msg:
+                return True  # suppress harmless edit conflicts
+        logger.error(f"Unhandled error: {exception}", exc_info=exception)
+        return False
+
     dp.message.middleware(AuthMiddleware())
     dp.callback_query.middleware(AuthMiddleware())
 
@@ -1061,7 +1074,7 @@ async def main():
     asyncio.create_task(run_scheduler(bot))
 
     try:
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, drop_pending_updates=True)
     finally:
         if config.DB:
             await config.DB.close()
