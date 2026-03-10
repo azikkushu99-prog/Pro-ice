@@ -63,9 +63,8 @@ CATALOG_TEXT = (
 
 CONTACT_TEXT = (
     "📞 <b>Связь с менеджером</b>\n\n"
-    "Telegram: @your_manager\n"
-    "Телефон: +7 (XXX) XXX-XX-XX\n"
-    "Время работы: 08:00 — 22:00"
+    "Telegram: @Tsari11\n"
+    "Телефон: +7 (988) 836-22-05\n"
 )
 
 from aiogram.exceptions import TelegramBadRequest
@@ -378,9 +377,7 @@ class Catalog(StatesGroup):
 
 
 class Checkout(StatesGroup):
-    date = State()
-    time = State()
-    address = State()
+    delivery_info = State()
     payment = State()
     confirm = State()
 
@@ -529,10 +526,12 @@ async def cb_rep_order(cb: CallbackQuery, state: FSMContext):
         return
     items = json.loads(row[0][0])
     await state.update_data(cart=items)
-    await state.set_state(Checkout.date)
+    await state.set_state(Checkout.delivery_info)
     await cb.message.edit_text(
         "🔁 Товары добавлены в корзину!\n\n"
-        "📅 Укажите дату доставки (ДД.ММ.ГГГГ):"
+        "📅 Укажите дату, время и адрес доставки одним сообщением:\n"
+        "<i>Например: 25.03.2025, с 10 до 12, ул. Ленина 15 кв. 4</i>",
+        parse_mode="HTML",
     )
     await cb.answer()
 
@@ -853,57 +852,55 @@ async def cb_checkout(cb: CallbackQuery, state: FSMContext):
             show_alert=True,
         )
         return
-    await state.set_state(Checkout.date)
+    await state.set_state(Checkout.delivery_info)
+    u = await config.DB.execute_fetchall("SELECT address FROM users WHERE tg_id=?", (cb.from_user.id,))
+    last_addr = u[0][0] if u and u[0][0] else None
+    hint = f"\n\nПоследний адрес: <b>{last_addr}</b>" if last_addr else ""
     await cb.message.edit_text(
         "📋 <b>Оформление заказа</b>\n\n"
-        "📅 Шаг 1/4 — Укажите дату доставки:\n"
-        "<i>Формат: ДД.ММ.ГГГГ (например, 25.01.2025)</i>",
+        "Напишите одним сообщением:\n"
+        "📅 Дату · 🕐 Время · 📍 Адрес\n\n"
+        "<i>Например: 25.03.2025, с 10 до 12, ул. Ленина 15 кв. 4</i>"
+        + hint,
         parse_mode="HTML",
     )
     await cb.answer()
 
 
-@rt.message(Checkout.date)
-async def on_date(msg: Message, state: FSMContext):
-    await state.update_data(d_date=msg.text.strip())
-    await state.set_state(Checkout.time)
-    await msg.answer(
-        "🕐 Шаг 2/4 — Укажите удобное время доставки:\n"
-        "<i>Например: 10:00–12:00 или после 14:00</i>",
-        parse_mode="HTML",
-    )
-
-
-@rt.message(Checkout.time)
-async def on_time(msg: Message, state: FSMContext):
-    await state.update_data(d_time=msg.text.strip())
-    u = await config.DB.execute_fetchall("SELECT address FROM users WHERE tg_id=?", (msg.from_user.id,))
-    addr = u[0][0] if u and u[0][0] else None
-    await state.set_state(Checkout.address)
-    if addr:
+@rt.message(Checkout.delivery_info)
+async def on_delivery_info(msg: Message, state: FSMContext):
+    text = msg.text.strip()
+    # Try to split by comma — expecting: date, time, address
+    parts = [p.strip() for p in text.split(",", 2)]
+    if len(parts) == 3:
+        d_date, d_time, d_addr = parts
+    elif len(parts) == 2:
+        d_date, d_time, d_addr = parts[0], parts[1], ""
         await msg.answer(
-            f"📍 Шаг 3/4 — Адрес доставки\n\n"
-            f"Последний адрес: <b>{addr}</b>\n\n"
-            f"Отправьте его же или введите новый:",
+            "Не удалось определить адрес. Пожалуйста, укажите его:\n"
+            "<i>Улица, дом, квартира</i>",
             parse_mode="HTML",
         )
+        await state.update_data(d_date=d_date, d_time=d_time)
+        await state.set_state(Checkout.delivery_info)
+        return
     else:
         await msg.answer(
-            "📍 Шаг 3/4 — Введите адрес доставки:\n"
-            "<i>Укажите улицу, дом и при необходимости квартиру</i>",
+            "Пожалуйста, укажите всё через запятую:\n"
+            "<i>Дата, время, адрес</i>\n\n"
+            "<i>Например: 25.03.2025, с 10 до 12, ул. Ленина 15</i>",
             parse_mode="HTML",
         )
+        return
 
-
-@rt.message(Checkout.address)
-async def on_addr(msg: Message, state: FSMContext):
-    await state.update_data(d_addr=msg.text.strip())
+    await state.update_data(d_date=d_date, d_time=d_time, d_addr=d_addr)
     u = await config.DB.execute_fetchall("SELECT phone FROM users WHERE tg_id=?", (msg.from_user.id,))
     phone = u[0][0] if u else ""
     await state.update_data(d_phone=phone)
     await state.set_state(Checkout.payment)
     await msg.answer(
-        f"💳 Шаг 4/4 — Выберите способ оплаты:\n"
+        f"✅ <b>{d_date}, {d_time}</b>\n📍 {d_addr}\n\n"
+        f"💳 Выберите способ оплаты:\n"
         f"<i>📱 Ваш номер для связи: {phone}</i>",
         reply_markup=payment_kb(),
         parse_mode="HTML",
