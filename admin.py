@@ -61,6 +61,22 @@ def admin_back_kb() -> InlineKeyboardMarkup:
     ])
 
 
+def report_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🗑 Сбросить статистику", callback_data="adm:report:reset_confirm")],
+        [InlineKeyboardButton(text="◀️ Админ-панель", callback_data="adm:back")],
+    ])
+
+
+def report_reset_confirm_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, сбросить всё", callback_data="adm:report:reset_do"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="adm:report"),
+        ],
+    ])
+
+
 # ═══════════════════════════════════════════════════════
 #  КЛАВИАТУРЫ — ЗАКАЗЫ
 # ═══════════════════════════════════════════════════════
@@ -524,7 +540,7 @@ async def cb_order_detail(cb: CallbackQuery):
 
     db = config.DB
     text = await _build_order_detail_text(db, oid)
-    await cb.message.edit_text(text, reply_markup=order_detail_kb(oid, uid, tab))
+    await cb.message.edit_text(text, reply_markup=order_detail_kb(oid, uid, tab), parse_mode=None)
     await cb.answer()
 
 
@@ -570,7 +586,7 @@ async def cb_adm_setstatus(cb: CallbackQuery):
     else:
         # Refresh the order detail
         text = await _build_order_detail_text(db, oid)
-        await cb.message.edit_text(text, reply_markup=order_detail_kb(oid, uid, tab))
+        await cb.message.edit_text(text, reply_markup=order_detail_kb(oid, uid, tab), parse_mode=None)
 
 
 @router.callback_query(F.data.startswith("status:"))
@@ -600,7 +616,7 @@ async def cb_report(cb: CallbackQuery):
     if not is_admin(cb.from_user.id):
         return
     text = await build_report()
-    await cb.message.edit_text(text, reply_markup=admin_back_kb())
+    await cb.message.edit_text(text, reply_markup=report_kb(), parse_mode=None)
     await cb.answer()
 
 
@@ -608,7 +624,32 @@ async def cb_report(cb: CallbackQuery):
 async def cmd_report(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer(await build_report())
+    await message.answer(await build_report(), parse_mode=None)
+
+
+@router.callback_query(F.data == "adm:report:reset_confirm")
+async def cb_report_reset_confirm(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        return
+    await cb.message.edit_text(
+        "⚠️ Вы уверены?\n\n"
+        "Это действие удалит ВСЕ заказы из базы данных.\n"
+        "Восстановить их будет невозможно.",
+        reply_markup=report_reset_confirm_kb(),
+    )
+    await cb.answer()
+
+
+@router.callback_query(F.data == "adm:report:reset_do")
+async def cb_report_reset_do(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        return
+    db = config.DB
+    await db.execute("DELETE FROM orders")
+    await db.commit()
+    await cb.answer("✅ Статистика сброшена", show_alert=True)
+    text = await build_report()
+    await cb.message.edit_text(text, reply_markup=report_kb(), parse_mode=None)
 
 
 async def build_report() -> str:
@@ -1128,7 +1169,7 @@ async def run_scheduler(bot_instance: Bot):
                 text = await build_report()
                 for cid in set(ADMIN_IDS + NOTIFY_IDS):
                     try:
-                        await bot_instance.send_message(cid, text)
+                        await bot_instance.send_message(cid, text, parse_mode=None)
                     except Exception:
                         pass
 
