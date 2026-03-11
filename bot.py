@@ -63,8 +63,9 @@ CATALOG_TEXT = (
 
 CONTACT_TEXT = (
     "📞 <b>Связь с менеджером</b>\n\n"
-    "Telegram: @Tsari11\n"
-    "Телефон: +7 (988) 836-22-05\n"
+    "Telegram: @your_manager\n"
+    "Телефон: +7 (XXX) XXX-XX-XX\n"
+    "Время работы: 08:00 — 22:00"
 )
 
 from aiogram.exceptions import TelegramBadRequest
@@ -1019,7 +1020,7 @@ async def on_confirm(cb: CallbackQuery, state: FSMContext):
     )
     for cid in NOTIFY_IDS:
         try:
-            await cb.bot.send_message(cid, notify, reply_markup=notify_order_kb(oid))
+            await cb.bot.send_message(cid, notify, reply_markup=notify_order_kb(oid), parse_mode=None)
         except Exception:
             pass
 
