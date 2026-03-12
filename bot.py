@@ -149,14 +149,13 @@ def product_list_kb(products: list, back_cb: str, page: int = 0, page_cb_prefix:
     return InlineKeyboardMarkup(inline_keyboard=btns)
 
 
-def qty_kb(pid: int) -> InlineKeyboardMarkup:
+def qty_kb(pid: int, unit: str = "шт") -> InlineKeyboardMarkup:
+    if unit == "кг":
+        qtys = [1, 5, 10]
+    else:
+        qtys = [20, 50, 100]
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="1", callback_data=f"qty:{pid}:1"),
-            InlineKeyboardButton(text="3", callback_data=f"qty:{pid}:3"),
-            InlineKeyboardButton(text="5", callback_data=f"qty:{pid}:5"),
-            InlineKeyboardButton(text="10", callback_data=f"qty:{pid}:10"),
-        ],
+        [InlineKeyboardButton(text=str(q), callback_data=f"qty:{pid}:{q}") for q in qtys],
         [InlineKeyboardButton(text="✏️ Своё количество", callback_data=f"qin:{pid}")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data="cat:back")],
     ])
@@ -707,7 +706,7 @@ async def cb_prod(cb: CallbackQuery, state: FSMContext):
     price_str = f"{price} ₽/{r[0][1]}" if price > 0 else "цена по запросу"
     await cb.message.edit_text(
         f"📦 <b>{r[0][0]}</b>\n💰 {price_str}\n\nВыберите количество:",
-        reply_markup=qty_kb(pid),
+        reply_markup=qty_kb(pid, r[0][1]),  # <-- добавил r[0][1]
         parse_mode="HTML",
     )
     await cb.answer()
